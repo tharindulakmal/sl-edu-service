@@ -1,0 +1,21 @@
+# Ignore binaries
+/server
+*.exe
+*.out
+
+# Ignore build folders
+bin/
+build/
+dist/
+
+# Git files
+.git
+.gitignore
+
+# Logs
+*.log
+
+# Local configs
+.env
+.vscode/
+.idea/
