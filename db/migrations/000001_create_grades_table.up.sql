@@ -1,0 +1,4 @@
+CREATE TABLE grades (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    grade VARCHAR(50) NOT NULL
+);
