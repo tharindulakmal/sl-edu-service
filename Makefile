@@ -1,6 +1,6 @@
 # Project variables
 APP_NAME=sl-edu-service
-DOCKER_USER=lakmaltharindu
+DOCKER_USER=lakmalgunasekara1995
 DOCKER_IMAGE=$(DOCKER_USER)/$(APP_NAME)
 
 # Default target (runs if you just type `make`)
