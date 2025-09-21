@@ -71,7 +71,7 @@ jobs:
           application_name: ${{ env.EB_APP }}
           environment_name: ${{ env.EB_ENV }}
           region: ${{ env.AWS_REGION }}
-          version_label: ${{ github.sha }}-${{ steps.meta.outputs.TAG }}
+          version_label: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           deployment_package: deploy.zip
           existing_bucket_name: ${{ env.EB_BUCKET }}
           aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
