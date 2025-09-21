@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
@@ -17,6 +19,18 @@ import (
 
 func main() {
 	r := gin.Default()
+	r.Use(cors.New(cors.Config{
+		AllowOrigins: []string{
+			"http://localhost:3000",
+			"http://sl-edu-service-env.eba-f8bzvpsg.us-east-1.elasticbeanstalk.com",
+			"https://sl-edu-service-env.eba-f8bzvpsg.us-east-1.elasticbeanstalk.com",
+		},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: false, // set true only if you actually use cookies/auth headers
+		MaxAge:           12 * time.Hour,
+	}))
 	// Load .env
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, using system env")
