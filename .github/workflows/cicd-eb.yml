@@ -74,3 +74,5 @@ jobs:
           version_label: ${{ github.sha }}-${{ steps.meta.outputs.TAG }}
           deployment_package: deploy.zip
           existing_bucket_name: ${{ env.EB_BUCKET }}
+          aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
