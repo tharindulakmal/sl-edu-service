@@ -3,7 +3,11 @@ name: CI/CD — Docker Hub → Elastic Beanstalk
 on:
   push:
     branches: ["main"]
-  workflow_dispatch: {}
+  workflow_dispatch: 
+    inputs:
+        version:
+          description: "Release version (e.g., v1.0.2)"
+          required: true
 
 env:
   IMAGE_NAME: ${{ vars.DOCKERHUB_USERNAME }}/sl-edu-service
@@ -11,6 +15,7 @@ env:
   EB_APP: sl-edu-service
   EB_ENV: Sl-edu-service-env
   EB_BUCKET: elasticbeanstalk-us-east-1-541798465384
+  VERSION: ${{ github.event.inputs.version }}
 
 jobs:
   deploy:
@@ -44,7 +49,7 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.TAG }}
+            ${{ env.IMAGE_NAME }}:${{ env.VERSION }}
             ${{ env.IMAGE_NAME }}:latest
 
       - name: Render Dockerrun.aws.json
@@ -52,7 +57,7 @@ jobs:
           cat > Dockerrun.aws.json << 'EOF'
           {
             "AWSEBDockerrunVersion": "1",
-            "Image": { "Name": "${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.TAG }}", "Update": "true" },
+            "Image": { "Name": "${{ env.IMAGE_NAME }}:${{ env.VERSION }}", "Update": "true" },
             "Ports": [{ "ContainerPort": 8080 }]
           }
           EOF
@@ -71,8 +76,9 @@ jobs:
           application_name: ${{ env.EB_APP }}
           environment_name: ${{ env.EB_ENV }}
           region: ${{ env.AWS_REGION }}
-          version_label: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          version_label: ${{ env.VERSION }}
           deployment_package: deploy.zip
           existing_bucket_name: ${{ env.EB_BUCKET }}
           aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          use_existing_version_if_available: true
