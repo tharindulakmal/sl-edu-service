@@ -60,6 +60,11 @@ func main() {
 		gradeRepo := repository.NewGradeRepository(db)
 		gradeHandler := handlers.NewGradeHandler(gradeRepo)
 		r.GET("/api/v1/grades", gradeHandler.GetGrades)
+
+		subjectRepo := repository.NewSubjectRepository(db)
+		subjectHandler := handlers.NewSubjectHandler(subjectRepo)
+
+		r.GET("/api/v1/subjects", subjectHandler.GetSubjectsByGrade)
 	}
 
 	r.GET("/health", func(c *gin.Context) {

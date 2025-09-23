@@ -59,6 +59,9 @@ DB_USER=postgres
 DB_PASS=secret
 DB_NAME=goapi
 
+Run migration 
+migrate -path db/migrations -database "mysql://admin:Tharindu#1995#11#16@tcp(127.0.0.1:3307)/sledu" up
+
 Pushing to Docker Hub
 # Tag
 docker tag sl-edu-service <your-dockerhub-username>/sl-edu-service:latest
