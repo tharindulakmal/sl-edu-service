@@ -11,10 +11,8 @@ import (
 	"github.com/gin-gonic/gin"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
-
+	"github.com/tharindulakmal/sl-edu-service/internal/routes"
 	// db "github.com/tharindulakmal/sl-edu-service/internal/database"
-	"github.com/tharindulakmal/sl-edu-service/internal/handlers"
-	"github.com/tharindulakmal/sl-edu-service/internal/repository"
 )
 
 func main() {
@@ -57,14 +55,8 @@ func main() {
 		if err := db.Ping(); err != nil {
 			log.Fatalf("could not ping DB: %v", err)
 		}
-		gradeRepo := repository.NewGradeRepository(db)
-		gradeHandler := handlers.NewGradeHandler(gradeRepo)
-		r.GET("/api/v1/grades", gradeHandler.GetGrades)
-
-		subjectRepo := repository.NewSubjectRepository(db)
-		subjectHandler := handlers.NewSubjectHandler(subjectRepo)
-
-		r.GET("/api/v1/subjects", subjectHandler.GetSubjectsByGrade)
+		// Register all routes in one place
+		routes.RegisterRoutes(r, db)
 	}
 
 	r.GET("/health", func(c *gin.Context) {

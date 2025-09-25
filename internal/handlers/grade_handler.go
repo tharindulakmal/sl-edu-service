@@ -9,10 +9,10 @@ import (
 )
 
 type GradeHandler struct {
-	Repo *repository.GradeRepository
+	Repo repository.GradeRepositoryInterface
 }
 
-func NewGradeHandler(repo *repository.GradeRepository) *GradeHandler {
+func NewGradeHandler(repo repository.GradeRepositoryInterface) *GradeHandler {
 	return &GradeHandler{Repo: repo}
 }
 
