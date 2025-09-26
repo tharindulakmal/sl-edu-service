@@ -32,4 +32,25 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 
 	lessons.GET("", lessonHandler.GetLessons)
 
+	topicRepo := repository.NewTopicRepository(db)
+	topicHandler := handlers.NewTopicHandler(topicRepo)
+
+	api.GET("/tutor/topics", topicHandler.GetTopics)
+
+	smartNoteRepo := repository.NewSmartNoteRepository(db)
+	smartNoteHandler := handlers.NewSmartNoteHandler(smartNoteRepo)
+
+	note := api.Group("/note")
+
+	note.GET("/smartnote/:lessonId/:topicId/:subId", smartNoteHandler.GetSmartNote)
+
+	questionRepo := repository.NewQuestionRepository(db)
+	questionHandler := handlers.NewQuestionHandler(questionRepo)
+
+	question := api.Group("/mcq")
+	{
+		question.GET("/questions/:id", questionHandler.GetQuestionByID)
+		question.GET("/questions", questionHandler.GetQuestions)
+	}
+
 }
