@@ -79,12 +79,34 @@ func (s *SubjectUpsert) UnmarshalJSON(data []byte) error {
 	}
 
 	s.Name = aux.Name
-	gradeID, err := parseFlexibleInt64(aux.GradeID, "gradeId")
-	if err != nil {
-		return err
+	if len(aux.GradeID) == 0 {
+		s.GradeID = 0
+		return nil
 	}
-	s.GradeID = gradeID
-	return nil
+
+	var idInt int64
+	if err := json.Unmarshal(aux.GradeID, &idInt); err == nil {
+		s.GradeID = idInt
+		return nil
+	}
+
+	var idStr string
+	if err := json.Unmarshal(aux.GradeID, &idStr); err == nil {
+		idStr = strings.TrimSpace(idStr)
+		if idStr == "" {
+			s.GradeID = 0
+			return nil
+		}
+
+		parsed, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			return fmt.Errorf("gradeId must be a valid integer")
+		}
+		s.GradeID = parsed
+		return nil
+	}
+
+	return fmt.Errorf("gradeId must be a number or numeric string")
 }
 
 type Lesson struct {
