@@ -18,7 +18,12 @@ func (a *StringArray) Scan(value interface{}) error {
 	if !ok {
 		return errors.New("failed to scan StringArray")
 	}
-	return json.Unmarshal(bytes, a)
+	if err := json.Unmarshal(bytes, a); err != nil {
+		// fallback: return empty slice instead of nil on bad data
+		*a = []string{}
+		return nil
+	}
+	return nil
 }
 
 func (a StringArray) Value() (driver.Value, error) {

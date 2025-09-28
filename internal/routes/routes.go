@@ -51,6 +51,10 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 	{
 		question.GET("/questions/:id", questionHandler.GetQuestionByID)
 		question.GET("/questions", questionHandler.GetQuestions)
+
+		question.POST("/questions", questionHandler.CreateQuestion)
+		question.PUT("/questions/:id", questionHandler.UpdateQuestion)
+		question.DELETE("/questions/:id", questionHandler.DeleteQuestion)
 	}
 
 }

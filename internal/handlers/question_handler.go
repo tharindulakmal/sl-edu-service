@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/tharindulakmal/sl-edu-service/internal/models"
 	"github.com/tharindulakmal/sl-edu-service/internal/repository"
 
 	"github.com/gin-gonic/gin"
@@ -66,11 +67,67 @@ func (h *QuestionHandler) GetQuestions(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
 
+	// get list
 	questions, err := h.repo.GetList(filters, page, pageSize)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, questions)
+	// get total count
+	totalCount, err := h.repo.Count(filters)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// return with metadata
+	c.JSON(http.StatusOK, gin.H{
+		"data":       questions,
+		"page":       page,
+		"pageSize":   pageSize,
+		"totalCount": totalCount,
+	})
+}
+
+// POST /api/v1/tutor/questions
+func (h *QuestionHandler) CreateQuestion(c *gin.Context) {
+	var q models.Question
+	if err := c.ShouldBindJSON(&q); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	id, err := h.repo.Create(&q)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	q.ID = int(id)
+	c.JSON(http.StatusCreated, q)
+}
+
+// PUT /api/v1/tutor/questions/:id
+func (h *QuestionHandler) UpdateQuestion(c *gin.Context) {
+	var q models.Question
+	if err := c.ShouldBindJSON(&q); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	id, _ := strconv.Atoi(c.Param("id"))
+	q.ID = id
+	if err := h.repo.Update(&q); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, q)
+}
+
+// DELETE /api/v1/tutor/questions/:id
+func (h *QuestionHandler) DeleteQuestion(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	if err := h.repo.Delete(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
