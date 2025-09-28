@@ -1,9 +1,48 @@
 package menuconfig
 
+import (
+	"encoding/json"
+	"fmt"
+	"strconv"
+	"strings"
+)
+
 // PagedResponse is a generic response wrapper for paginated data.
 type PagedResponse[T any] struct {
 	Data       []T `json:"data"`
 	TotalCount int `json:"totalCount"`
+}
+
+func parseFlexibleInt64(raw json.RawMessage, field string) (int64, error) {
+	if len(raw) == 0 {
+		return 0, nil
+	}
+
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return 0, nil
+	}
+
+	var asInt int64
+	if err := json.Unmarshal(raw, &asInt); err == nil {
+		return asInt, nil
+	}
+
+	var asStr string
+	if err := json.Unmarshal(raw, &asStr); err == nil {
+		asStr = strings.TrimSpace(asStr)
+		if asStr == "" {
+			return 0, nil
+		}
+
+		parsed, err := strconv.ParseInt(asStr, 10, 64)
+		if err != nil {
+			return 0, fmt.Errorf("%s must be a valid integer", field)
+		}
+		return parsed, nil
+	}
+
+	return 0, fmt.Errorf("%s must be a number or numeric string", field)
 }
 
 type Grade struct {
@@ -28,6 +67,26 @@ type SubjectUpsert struct {
 	Name    string `json:"name"`
 }
 
+func (s *SubjectUpsert) UnmarshalJSON(data []byte) error {
+	type subjectUpsertJSON struct {
+		GradeID json.RawMessage `json:"gradeId"`
+		Name    string          `json:"name"`
+	}
+
+	var aux subjectUpsertJSON
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	s.Name = aux.Name
+	gradeID, err := parseFlexibleInt64(aux.GradeID, "gradeId")
+	if err != nil {
+		return err
+	}
+	s.GradeID = gradeID
+	return nil
+}
+
 type Lesson struct {
 	ID        int64  `json:"id"`
 	SubjectID int64  `json:"subjectId"`
@@ -38,6 +97,26 @@ type Lesson struct {
 type LessonUpsert struct {
 	SubjectID int64  `json:"subjectId"`
 	Name      string `json:"name"`
+}
+
+func (l *LessonUpsert) UnmarshalJSON(data []byte) error {
+	type lessonUpsertJSON struct {
+		SubjectID json.RawMessage `json:"subjectId"`
+		Name      string          `json:"name"`
+	}
+
+	var aux lessonUpsertJSON
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	l.Name = aux.Name
+	subjectID, err := parseFlexibleInt64(aux.SubjectID, "subjectId")
+	if err != nil {
+		return err
+	}
+	l.SubjectID = subjectID
+	return nil
 }
 
 type Topic struct {
@@ -52,6 +131,26 @@ type TopicUpsert struct {
 	Name     string `json:"name"`
 }
 
+func (t *TopicUpsert) UnmarshalJSON(data []byte) error {
+	type topicUpsertJSON struct {
+		LessonID json.RawMessage `json:"lessonId"`
+		Name     string          `json:"name"`
+	}
+
+	var aux topicUpsertJSON
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	t.Name = aux.Name
+	lessonID, err := parseFlexibleInt64(aux.LessonID, "lessonId")
+	if err != nil {
+		return err
+	}
+	t.LessonID = lessonID
+	return nil
+}
+
 type Subtopic struct {
 	ID        int64  `json:"id"`
 	TopicID   int64  `json:"topicId"`
@@ -62,6 +161,26 @@ type Subtopic struct {
 type SubtopicUpsert struct {
 	TopicID int64  `json:"topicId"`
 	Name    string `json:"name"`
+}
+
+func (s *SubtopicUpsert) UnmarshalJSON(data []byte) error {
+	type subtopicUpsertJSON struct {
+		TopicID json.RawMessage `json:"topicId"`
+		Name    string          `json:"name"`
+	}
+
+	var aux subtopicUpsertJSON
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	s.Name = aux.Name
+	topicID, err := parseFlexibleInt64(aux.TopicID, "topicId")
+	if err != nil {
+		return err
+	}
+	s.TopicID = topicID
+	return nil
 }
 
 type Tutor struct {
