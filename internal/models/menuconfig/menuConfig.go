@@ -1,5 +1,12 @@
 package menuconfig
 
+import (
+	"encoding/json"
+	"fmt"
+	"strconv"
+	"strings"
+)
+
 // PagedResponse is a generic response wrapper for paginated data.
 type PagedResponse[T any] struct {
 	Data       []T `json:"data"`
@@ -26,6 +33,48 @@ type Subject struct {
 type SubjectUpsert struct {
 	GradeID int64  `json:"gradeId"`
 	Name    string `json:"name"`
+}
+
+func (s *SubjectUpsert) UnmarshalJSON(data []byte) error {
+	type subjectUpsertJSON struct {
+		GradeID json.RawMessage `json:"gradeId"`
+		Name    string          `json:"name"`
+	}
+
+	var aux subjectUpsertJSON
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	s.Name = aux.Name
+	if len(aux.GradeID) == 0 {
+		s.GradeID = 0
+		return nil
+	}
+
+	var idInt int64
+	if err := json.Unmarshal(aux.GradeID, &idInt); err == nil {
+		s.GradeID = idInt
+		return nil
+	}
+
+	var idStr string
+	if err := json.Unmarshal(aux.GradeID, &idStr); err == nil {
+		idStr = strings.TrimSpace(idStr)
+		if idStr == "" {
+			s.GradeID = 0
+			return nil
+		}
+
+		parsed, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			return fmt.Errorf("gradeId must be a valid integer")
+		}
+		s.GradeID = parsed
+		return nil
+	}
+
+	return fmt.Errorf("gradeId must be a number or numeric string")
 }
 
 type Lesson struct {
