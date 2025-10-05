@@ -20,8 +20,8 @@ func NewTopicRepository(db *sql.DB) TopicRepositoryInterface {
 }
 
 func (r *TopicRepository) GetTopicsByLesson(lessonID int) ([]models.Topic, error) {
-	// fetch topics
-	rows, err := r.DB.Query("SELECT id, topic_name, main_topic_name FROM topics WHERE lesson_id = ? ORDER BY sort_order", lessonID)
+	// fetch topics -- schema now stores topic label in `name`
+	rows, err := r.DB.Query("SELECT id, name FROM topics WHERE lesson_id = ? ORDER BY created_at", lessonID)
 	if err != nil {
 		return nil, err
 	}
@@ -30,12 +30,12 @@ func (r *TopicRepository) GetTopicsByLesson(lessonID int) ([]models.Topic, error
 	var topics []models.Topic
 	for rows.Next() {
 		var t models.Topic
-		if err := rows.Scan(&t.TopicID, &t.TopicName, &t.MainTopicName); err != nil {
+		if err := rows.Scan(&t.TopicID, &t.TopicName); err != nil {
 			return nil, err
 		}
 
 		// fetch subtopics for this topic
-		subRows, err := r.DB.Query("SELECT id, topic_id, sub_topic_name FROM subtopics WHERE topic_id = ? ORDER BY sort_order", t.TopicID)
+		subRows, err := r.DB.Query("SELECT id, topic_id, name FROM subtopics WHERE topic_id = ? ORDER BY created_at", t.TopicID)
 		if err != nil {
 			return nil, err
 		}

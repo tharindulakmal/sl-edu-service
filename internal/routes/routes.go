@@ -44,9 +44,7 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 	smartNoteRepo := repository.NewSmartNoteRepository(db)
 	smartNoteHandler := handlers.NewSmartNoteHandler(smartNoteRepo)
 
-	note := api.Group("/note")
-
-	note.GET("/smartnote/:lessonId/:topicId/:subId", smartNoteHandler.GetSmartNote)
+	api.GET("/note/smartnote", smartNoteHandler.GetSmartNote)
 
 	questionRepo := repository.NewQuestionRepository(db)
 	questionHandler := handlers.NewQuestionHandler(questionRepo)
