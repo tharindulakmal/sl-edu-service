@@ -43,6 +43,11 @@ func (h *QuestionHandler) GetQuestions(c *gin.Context) {
 			filters["lessonId"] = id
 		}
 	}
+	if v := c.Query("gradeId"); v != "" {
+		if id, err := strconv.Atoi(v); err == nil {
+			filters["gradeId"] = id
+		}
+	}
 	if v := c.Query("topicId"); v != "" {
 		if id, err := strconv.Atoi(v); err == nil {
 			filters["topicId"] = id
@@ -97,6 +102,10 @@ func (h *QuestionHandler) CreateQuestion(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if q.GradeID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "gradeId is required"})
+		return
+	}
 	id, err := h.repo.Create(&q)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -115,6 +124,10 @@ func (h *QuestionHandler) UpdateQuestion(c *gin.Context) {
 	}
 	id, _ := strconv.Atoi(c.Param("id"))
 	q.ID = id
+	if q.GradeID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "gradeId is required"})
+		return
+	}
 	if err := h.repo.Update(&q); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
