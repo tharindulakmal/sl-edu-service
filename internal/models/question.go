@@ -32,6 +32,7 @@ func (a StringArray) Value() (driver.Value, error) {
 
 type Question struct {
 	ID            int         `json:"id" db:"id"`
+	GradeID       int         `json:"gradeId" db:"grade_id"`
 	LessonID      int         `json:"lessonId" db:"lesson_id"`
 	TopicID       *int        `json:"topicId,omitempty" db:"topic_id"`
 	SubtopicID    *int        `json:"subtopicId,omitempty" db:"subtopic_id"`

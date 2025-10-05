@@ -25,7 +25,7 @@ func NewQuestionRepository(db *sql.DB) QuestionRepository {
 }
 
 func (r *questionRepository) GetByID(id int) (*models.Question, error) {
-	query := `SELECT id, lesson_id, topic_id, subtopic_id, tutor_id, tute_id,
+	query := `SELECT id, grade_id, lesson_id, topic_id, subtopic_id, tutor_id, tute_id,
 					 question, question_img_url, correct_answer, theory, solution,
 					 other_answers, DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%sZ') as created_at
 			  FROM questions WHERE id = ?`
@@ -33,7 +33,7 @@ func (r *questionRepository) GetByID(id int) (*models.Question, error) {
 	row := r.db.QueryRow(query, id)
 
 	var q models.Question
-	if err := row.Scan(&q.ID, &q.LessonID, &q.TopicID, &q.SubtopicID, &q.TutorID, &q.TuteID,
+	if err := row.Scan(&q.ID, &q.GradeID, &q.LessonID, &q.TopicID, &q.SubtopicID, &q.TutorID, &q.TuteID,
 		&q.Question, &q.QuestionImg, &q.CorrectAnswer, &q.Theory, &q.Solution,
 		&q.OtherAnswers, &q.CreatedAt); err != nil {
 		return nil, err
@@ -45,6 +45,10 @@ func (r *questionRepository) GetList(filters map[string]interface{}, page, pageS
 	where := "1=1"
 	args := []interface{}{}
 
+	if gradeId, ok := filters["gradeId"]; ok {
+		where += " AND grade_id = ?"
+		args = append(args, gradeId)
+	}
 	if lessonId, ok := filters["lessonId"]; ok {
 		where += " AND lesson_id = ?"
 		args = append(args, lessonId)
@@ -68,7 +72,7 @@ func (r *questionRepository) GetList(filters map[string]interface{}, page, pageS
 
 	offset := (page - 1) * pageSize
 	query := fmt.Sprintf(`
-		SELECT id, lesson_id, topic_id, subtopic_id, tutor_id, tute_id,
+		SELECT id, grade_id, lesson_id, topic_id, subtopic_id, tutor_id, tute_id,
 		       question, question_img_url, correct_answer, theory, solution,
 		       other_answers,
 		       DATE_FORMAT(created_at, '%%Y-%%m-%%dT%%H:%%i:%%sZ') as created_at
@@ -88,7 +92,7 @@ func (r *questionRepository) GetList(filters map[string]interface{}, page, pageS
 	var questions []models.Question
 	for rows.Next() {
 		var q models.Question
-		if err := rows.Scan(&q.ID, &q.LessonID, &q.TopicID, &q.SubtopicID, &q.TutorID, &q.TuteID,
+		if err := rows.Scan(&q.ID, &q.GradeID, &q.LessonID, &q.TopicID, &q.SubtopicID, &q.TutorID, &q.TuteID,
 			&q.Question, &q.QuestionImg, &q.CorrectAnswer, &q.Theory, &q.Solution,
 			&q.OtherAnswers, &q.CreatedAt); err != nil {
 			return nil, err
@@ -101,13 +105,13 @@ func (r *questionRepository) GetList(filters map[string]interface{}, page, pageS
 func (r *questionRepository) Create(q *models.Question) (int64, error) {
 	query := `
 		INSERT INTO questions (
-			lesson_id, topic_id, subtopic_id, tutor_id, tute_id,
+			lesson_id, grade_id, topic_id, subtopic_id, tutor_id, tute_id,
 			question, question_img_url, correct_answer, theory, solution, other_answers
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	res, err := r.db.Exec(query,
-		q.LessonID, q.TopicID, q.SubtopicID, q.TutorID, q.TuteID,
+		q.LessonID, q.GradeID, q.TopicID, q.SubtopicID, q.TutorID, q.TuteID,
 		q.Question, q.QuestionImg, q.CorrectAnswer, q.Theory, q.Solution, q.OtherAnswers,
 	)
 	if err != nil {
@@ -119,11 +123,11 @@ func (r *questionRepository) Create(q *models.Question) (int64, error) {
 func (r *questionRepository) Update(q *models.Question) error {
 	query := `
 		UPDATE questions
-		SET lesson_id=?, topic_id=?, subtopic_id=?, tutor_id=?, tute_id=?,
+		SET lesson_id=?, grade_id=?, topic_id=?, subtopic_id=?, tutor_id=?, tute_id=?,
 		    question=?, question_img_url=?, correct_answer=?, theory=?, solution=?, other_answers=?
 		WHERE id=?`
 	_, err := r.db.Exec(query,
-		q.LessonID, q.TopicID, q.SubtopicID, q.TutorID, q.TuteID,
+		q.LessonID, q.GradeID, q.TopicID, q.SubtopicID, q.TutorID, q.TuteID,
 		q.Question, q.QuestionImg, q.CorrectAnswer, q.Theory, q.Solution, q.OtherAnswers,
 		q.ID,
 	)
@@ -139,6 +143,10 @@ func (r *questionRepository) Count(filters map[string]interface{}) (int, error) 
 	where := "1=1"
 	args := []interface{}{}
 
+	if gradeId, ok := filters["gradeId"]; ok {
+		where += " AND grade_id = ?"
+		args = append(args, gradeId)
+	}
 	if lessonId, ok := filters["lessonId"]; ok {
 		where += " AND lesson_id = ?"
 		args = append(args, lessonId)
