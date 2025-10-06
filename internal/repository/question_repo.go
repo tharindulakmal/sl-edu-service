@@ -3,6 +3,7 @@ package repository
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/tharindulakmal/sl-edu-service/internal/models"
 )
@@ -42,44 +43,63 @@ func (r *questionRepository) GetByID(id int) (*models.Question, error) {
 }
 
 func (r *questionRepository) GetList(filters map[string]interface{}, page, pageSize int) ([]models.Question, error) {
-	where := "1=1"
+	whereParts := []string{"1=1"}
 	args := []interface{}{}
 
-	if gradeId, ok := filters["gradeId"]; ok {
-		where += " AND grade_id = ?"
-		args = append(args, gradeId)
+	gradeID, hasGrade := filters["gradeId"]
+	subjectID, hasSubject := filters["subjectId"]
+
+	switch {
+	case hasSubject && !hasGrade:
+		whereParts = append(whereParts, "l.subject_id = ?")
+		args = append(args, subjectID)
+	case hasGrade && !hasSubject:
+		whereParts = append(whereParts, "EXISTS (SELECT 1 FROM grade_subjects gs WHERE gs.grade_id = ? AND gs.subject_id = l.subject_id)")
+		args = append(args, gradeID)
+	case hasGrade && hasSubject:
+		whereParts = append(whereParts, "l.subject_id = ?")
+		args = append(args, subjectID)
+		whereParts = append(whereParts, "EXISTS (SELECT 1 FROM grade_subjects gs WHERE gs.grade_id = ? AND gs.subject_id = l.subject_id)")
+		args = append(args, gradeID)
 	}
-	if lessonId, ok := filters["lessonId"]; ok {
-		where += " AND lesson_id = ?"
-		args = append(args, lessonId)
+
+	if lessonID, ok := filters["lessonId"]; ok {
+		whereParts = append(whereParts, "q.lesson_id = ?")
+		args = append(args, lessonID)
 	}
-	if topicId, ok := filters["topicId"]; ok {
-		where += " AND topic_id = ?"
-		args = append(args, topicId)
+	if topicID, ok := filters["topicId"]; ok {
+		whereParts = append(whereParts, "q.topic_id = ?")
+		args = append(args, topicID)
 	}
-	if subtopicId, ok := filters["subtopicId"]; ok {
-		where += " AND subtopic_id = ?"
-		args = append(args, subtopicId)
+	if subtopicID, ok := filters["subtopicId"]; ok {
+		whereParts = append(whereParts, "q.subtopic_id = ?")
+		args = append(args, subtopicID)
 	}
-	if tutorId, ok := filters["tutorId"]; ok {
-		where += " AND tutor_id = ?"
-		args = append(args, tutorId)
+	if tutorID, ok := filters["tutorId"]; ok {
+		whereParts = append(whereParts, "q.tutor_id = ?")
+		args = append(args, tutorID)
 	}
-	if tuteId, ok := filters["tuteId"]; ok {
-		where += " AND tute_id = ?"
-		args = append(args, tuteId)
+	if tuteID, ok := filters["tuteId"]; ok {
+		whereParts = append(whereParts, "q.tute_id = ?")
+		args = append(args, tuteID)
+	}
+
+	whereClause := ""
+	if len(whereParts) > 0 {
+		whereClause = "WHERE " + strings.Join(whereParts, " AND ")
 	}
 
 	offset := (page - 1) * pageSize
 	query := fmt.Sprintf(`
-		SELECT id, grade_id, lesson_id, topic_id, subtopic_id, tutor_id, tute_id,
-		       question, question_img_url, correct_answer, theory, solution,
-		       other_answers,
-		       DATE_FORMAT(created_at, '%%Y-%%m-%%dT%%H:%%i:%%sZ') as created_at
-		FROM questions
-		WHERE %s
-		ORDER BY id ASC
-		LIMIT ? OFFSET ?`, where)
+                SELECT q.id, q.grade_id, q.lesson_id, q.topic_id, q.subtopic_id, q.tutor_id, q.tute_id,
+                       q.question, q.question_img_url, q.correct_answer, q.theory, q.solution,
+                       q.other_answers,
+                       DATE_FORMAT(q.created_at, '%%Y-%%m-%%dT%%H:%%i:%%sZ') as created_at
+                FROM questions q
+                INNER JOIN lessons l ON q.lesson_id = l.id
+                %s
+                ORDER BY q.id DESC
+                LIMIT ? OFFSET ?`, whereClause)
 
 	args = append(args, pageSize, offset)
 
@@ -140,35 +160,53 @@ func (r *questionRepository) Delete(id int) error {
 }
 
 func (r *questionRepository) Count(filters map[string]interface{}) (int, error) {
-	where := "1=1"
+	whereParts := []string{"1=1"}
 	args := []interface{}{}
 
-	if gradeId, ok := filters["gradeId"]; ok {
-		where += " AND grade_id = ?"
-		args = append(args, gradeId)
-	}
-	if lessonId, ok := filters["lessonId"]; ok {
-		where += " AND lesson_id = ?"
-		args = append(args, lessonId)
-	}
-	if topicId, ok := filters["topicId"]; ok {
-		where += " AND topic_id = ?"
-		args = append(args, topicId)
-	}
-	if subtopicId, ok := filters["subtopicId"]; ok {
-		where += " AND subtopic_id = ?"
-		args = append(args, subtopicId)
-	}
-	if tutorId, ok := filters["tutorId"]; ok {
-		where += " AND tutor_id = ?"
-		args = append(args, tutorId)
-	}
-	if tuteId, ok := filters["tuteId"]; ok {
-		where += " AND tute_id = ?"
-		args = append(args, tuteId)
+	gradeID, hasGrade := filters["gradeId"]
+	subjectID, hasSubject := filters["subjectId"]
+
+	switch {
+	case hasSubject && !hasGrade:
+		whereParts = append(whereParts, "l.subject_id = ?")
+		args = append(args, subjectID)
+	case hasGrade && !hasSubject:
+		whereParts = append(whereParts, "EXISTS (SELECT 1 FROM grade_subjects gs WHERE gs.grade_id = ? AND gs.subject_id = l.subject_id)")
+		args = append(args, gradeID)
+	case hasGrade && hasSubject:
+		whereParts = append(whereParts, "l.subject_id = ?")
+		args = append(args, subjectID)
+		whereParts = append(whereParts, "EXISTS (SELECT 1 FROM grade_subjects gs WHERE gs.grade_id = ? AND gs.subject_id = l.subject_id)")
+		args = append(args, gradeID)
 	}
 
-	query := fmt.Sprintf("SELECT COUNT(*) FROM questions WHERE %s", where)
+	if lessonID, ok := filters["lessonId"]; ok {
+		whereParts = append(whereParts, "q.lesson_id = ?")
+		args = append(args, lessonID)
+	}
+	if topicID, ok := filters["topicId"]; ok {
+		whereParts = append(whereParts, "q.topic_id = ?")
+		args = append(args, topicID)
+	}
+	if subtopicID, ok := filters["subtopicId"]; ok {
+		whereParts = append(whereParts, "q.subtopic_id = ?")
+		args = append(args, subtopicID)
+	}
+	if tutorID, ok := filters["tutorId"]; ok {
+		whereParts = append(whereParts, "q.tutor_id = ?")
+		args = append(args, tutorID)
+	}
+	if tuteID, ok := filters["tuteId"]; ok {
+		whereParts = append(whereParts, "q.tute_id = ?")
+		args = append(args, tuteID)
+	}
+
+	whereClause := ""
+	if len(whereParts) > 0 {
+		whereClause = "WHERE " + strings.Join(whereParts, " AND ")
+	}
+
+	query := fmt.Sprintf("SELECT COUNT(*) FROM questions q INNER JOIN lessons l ON q.lesson_id = l.id %s", whereClause)
 
 	var count int
 	if err := r.db.QueryRow(query, args...).Scan(&count); err != nil {

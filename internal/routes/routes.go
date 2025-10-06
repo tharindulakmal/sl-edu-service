@@ -4,7 +4,7 @@ import (
 	"database/sql"
 
 	"github.com/gin-gonic/gin"
-	menuhandler "github.com/tharindulakmal/sl-edu-service/internal/handler"
+	menuconfig "github.com/tharindulakmal/sl-edu-service/internal/handler"
 	"github.com/tharindulakmal/sl-edu-service/internal/handlers"
 	"github.com/tharindulakmal/sl-edu-service/internal/repository"
 )
@@ -13,7 +13,8 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 	api := router.Group("/api/v1")
 
 	admin := api.Group("/admin")
-	menuhandler.RegisterAdminMenuConfigRoutes(admin, db)
+	menuconfig.RegisterCatalogRoutes(admin, db)
+	menuconfig.RegisterAdminMenuConfigRoutes(admin, db)
 
 	// Grades
 	gradeRepo := repository.NewGradeRepository(db)

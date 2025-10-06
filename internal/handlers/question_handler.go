@@ -43,6 +43,11 @@ func (h *QuestionHandler) GetQuestions(c *gin.Context) {
 			filters["lessonId"] = id
 		}
 	}
+	if v := c.Query("subjectId"); v != "" {
+		if id, err := strconv.Atoi(v); err == nil {
+			filters["subjectId"] = id
+		}
+	}
 	if v := c.Query("gradeId"); v != "" {
 		if id, err := strconv.Atoi(v); err == nil {
 			filters["gradeId"] = id

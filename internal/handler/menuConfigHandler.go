@@ -16,22 +16,23 @@ import (
 )
 
 type (
-	Grade          = menuconfigmodels.Grade
-	GradeUpsert    = menuconfigmodels.GradeUpsert
-	Subject        = menuconfigmodels.Subject
-	SubjectUpsert  = menuconfigmodels.SubjectUpsert
-	Lesson         = menuconfigmodels.Lesson
-	LessonUpsert   = menuconfigmodels.LessonUpsert
-	Topic          = menuconfigmodels.Topic
-	TopicUpsert    = menuconfigmodels.TopicUpsert
-	Subtopic       = menuconfigmodels.Subtopic
-	SubtopicUpsert = menuconfigmodels.SubtopicUpsert
-	Tutor          = menuconfigmodels.Tutor
-	TutorUpsert    = menuconfigmodels.TutorUpsert
-	Year           = menuconfigmodels.Year
-	YearUpsert     = menuconfigmodels.YearUpsert
-	Tutorial       = menuconfigmodels.Tutorial
-	TutorialUpsert = menuconfigmodels.TutorialUpsert
+	Grade           = menuconfigmodels.Grade
+	GradeUpsert     = menuconfigmodels.GradeUpsert
+	Subject         = menuconfigmodels.Subject
+	SubjectUpsert   = menuconfigmodels.SubjectUpsert
+	CatalogResponse = menuconfigmodels.CatalogResponse
+	Lesson          = menuconfigmodels.Lesson
+	LessonUpsert    = menuconfigmodels.LessonUpsert
+	Topic           = menuconfigmodels.Topic
+	TopicUpsert     = menuconfigmodels.TopicUpsert
+	Subtopic        = menuconfigmodels.Subtopic
+	SubtopicUpsert  = menuconfigmodels.SubtopicUpsert
+	Tutor           = menuconfigmodels.Tutor
+	TutorUpsert     = menuconfigmodels.TutorUpsert
+	Year            = menuconfigmodels.Year
+	YearUpsert      = menuconfigmodels.YearUpsert
+	Tutorial        = menuconfigmodels.Tutorial
+	TutorialUpsert  = menuconfigmodels.TutorialUpsert
 )
 
 type PagedResponse[T any] = menuconfigmodels.PagedResponse[T]
@@ -44,9 +45,22 @@ func NewHandler(repo *repository.MenuConfigRepository) *Handler {
 	return &Handler{repo: repo}
 }
 
+func RegisterCatalogRoutes(group *gin.RouterGroup, db *sql.DB) {
+	repo := repository.NewMenuConfigRepository(db)
+	handler := NewHandler(repo)
+
+	registerCatalogRoutes(group, handler)
+}
+
+func registerCatalogRoutes(group *gin.RouterGroup, handler *Handler) {
+	group.GET("/catalog", handler.getCatalog)
+}
+
 func RegisterAdminMenuConfigRoutes(group *gin.RouterGroup, db *sql.DB) {
 	repo := repository.NewMenuConfigRepository(db)
 	handler := NewHandler(repo)
+
+	registerCatalogRoutes(group, handler)
 
 	group.GET("/grades", handler.listGrades)
 	group.POST("/grades", handler.createGrade)
@@ -95,6 +109,16 @@ func RegisterAdminMenuConfigRoutes(group *gin.RouterGroup, db *sql.DB) {
 	group.GET("/tutorials/:id", handler.getTutorial)
 	group.PUT("/tutorials/:id", handler.updateTutorial)
 	group.DELETE("/tutorials/:id", handler.deleteTutorial)
+}
+
+func (h *Handler) getCatalog(c *gin.Context) {
+	catalog, err := h.repo.FetchCatalog(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, catalog)
 }
 
 func (h *Handler) listGrades(c *gin.Context) {
