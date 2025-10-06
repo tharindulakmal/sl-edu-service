@@ -11,20 +11,22 @@ import (
 )
 
 type (
-	Grade          = menuconfigmodels.Grade
-	GradeUpsert    = menuconfigmodels.GradeUpsert
-	Subject        = menuconfigmodels.Subject
-	SubjectUpsert  = menuconfigmodels.SubjectUpsert
-	Topic          = menuconfigmodels.Topic
-	TopicUpsert    = menuconfigmodels.TopicUpsert
-	Subtopic       = menuconfigmodels.Subtopic
-	SubtopicUpsert = menuconfigmodels.SubtopicUpsert
-	Tutor          = menuconfigmodels.Tutor
-	TutorUpsert    = menuconfigmodels.TutorUpsert
-	Year           = menuconfigmodels.Year
-	YearUpsert     = menuconfigmodels.YearUpsert
-	Tutorial       = menuconfigmodels.Tutorial
-	TutorialUpsert = menuconfigmodels.TutorialUpsert
+	Grade           = menuconfigmodels.Grade
+	GradeUpsert     = menuconfigmodels.GradeUpsert
+	Subject         = menuconfigmodels.Subject
+	SubjectUpsert   = menuconfigmodels.SubjectUpsert
+	CatalogResponse = menuconfigmodels.CatalogResponse
+	GradeSubject    = menuconfigmodels.GradeSubject
+	Topic           = menuconfigmodels.Topic
+	TopicUpsert     = menuconfigmodels.TopicUpsert
+	Subtopic        = menuconfigmodels.Subtopic
+	SubtopicUpsert  = menuconfigmodels.SubtopicUpsert
+	Tutor           = menuconfigmodels.Tutor
+	TutorUpsert     = menuconfigmodels.TutorUpsert
+	Year            = menuconfigmodels.Year
+	YearUpsert      = menuconfigmodels.YearUpsert
+	Tutorial        = menuconfigmodels.Tutorial
+	TutorialUpsert  = menuconfigmodels.TutorialUpsert
 )
 
 var ErrMenuConfigNotFound = errors.New("menuconfig: not found")
@@ -1086,6 +1088,121 @@ func (r *MenuConfigRepository) DeleteTutorial(ctx context.Context, id int64) err
 		return ErrMenuConfigNotFound
 	}
 	return nil
+}
+
+func (r *MenuConfigRepository) FetchCatalog(ctx context.Context) (CatalogResponse, error) {
+	resp := CatalogResponse{
+		Grades:        make([]Grade, 0),
+		Subjects:      make([]Subject, 0),
+		GradeSubjects: make([]GradeSubject, 0),
+		Lessons:       make([]Lesson, 0),
+		Topics:        make([]Topic, 0),
+		Subtopics:     make([]Subtopic, 0),
+	}
+
+	gradesRows, err := r.db.QueryContext(ctx, "SELECT id, name, DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%sZ') AS created_at FROM grades ORDER BY id ASC")
+	if err != nil {
+		return resp, err
+	}
+	defer gradesRows.Close()
+
+	for gradesRows.Next() {
+		var grade Grade
+		if err := gradesRows.Scan(&grade.ID, &grade.Name, &grade.CreatedAt); err != nil {
+			return resp, err
+		}
+		resp.Grades = append(resp.Grades, grade)
+	}
+	if err := gradesRows.Err(); err != nil {
+		return resp, err
+	}
+
+	subjectsRows, err := r.db.QueryContext(ctx, "SELECT id, name, DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%sZ') AS created_at FROM subjects ORDER BY id ASC")
+	if err != nil {
+		return resp, err
+	}
+	defer subjectsRows.Close()
+
+	for subjectsRows.Next() {
+		var subject Subject
+		if err := subjectsRows.Scan(&subject.ID, &subject.Name, &subject.CreatedAt); err != nil {
+			return resp, err
+		}
+		resp.Subjects = append(resp.Subjects, subject)
+	}
+	if err := subjectsRows.Err(); err != nil {
+		return resp, err
+	}
+
+	gradeSubjectsRows, err := r.db.QueryContext(ctx, "SELECT grade_id, subject_id, DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%sZ') AS created_at FROM grade_subjects ORDER BY grade_id ASC, subject_id ASC")
+	if err != nil {
+		return resp, err
+	}
+	defer gradeSubjectsRows.Close()
+
+	for gradeSubjectsRows.Next() {
+		var gs GradeSubject
+		if err := gradeSubjectsRows.Scan(&gs.GradeID, &gs.SubjectID, &gs.CreatedAt); err != nil {
+			return resp, err
+		}
+		resp.GradeSubjects = append(resp.GradeSubjects, gs)
+	}
+	if err := gradeSubjectsRows.Err(); err != nil {
+		return resp, err
+	}
+
+	lessonsRows, err := r.db.QueryContext(ctx, "SELECT id, subject_id, name, DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%sZ') AS created_at FROM lessons ORDER BY id ASC")
+	if err != nil {
+		return resp, err
+	}
+	defer lessonsRows.Close()
+
+	for lessonsRows.Next() {
+		var lesson Lesson
+		if err := lessonsRows.Scan(&lesson.ID, &lesson.SubjectID, &lesson.Name, &lesson.CreatedAt); err != nil {
+			return resp, err
+		}
+		resp.Lessons = append(resp.Lessons, lesson)
+	}
+	if err := lessonsRows.Err(); err != nil {
+		return resp, err
+	}
+
+	topicsRows, err := r.db.QueryContext(ctx, "SELECT id, lesson_id, name, DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%sZ') AS created_at FROM topics ORDER BY id ASC")
+	if err != nil {
+		return resp, err
+	}
+	defer topicsRows.Close()
+
+	for topicsRows.Next() {
+		var topic Topic
+		if err := topicsRows.Scan(&topic.ID, &topic.LessonID, &topic.Name, &topic.CreatedAt); err != nil {
+			return resp, err
+		}
+		resp.Topics = append(resp.Topics, topic)
+	}
+	if err := topicsRows.Err(); err != nil {
+		return resp, err
+	}
+
+	subtopicsRows, err := r.db.QueryContext(ctx, "SELECT id, topic_id, name, DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%sZ') AS created_at FROM subtopics ORDER BY id ASC")
+	if err != nil {
+		return resp, err
+	}
+	defer subtopicsRows.Close()
+
+	for subtopicsRows.Next() {
+		var subtopic Subtopic
+		if err := subtopicsRows.Scan(&subtopic.ID, &subtopic.TopicID, &subtopic.Name, &subtopic.CreatedAt); err != nil {
+			return resp, err
+		}
+		resp.Subtopics = append(resp.Subtopics, subtopic)
+	}
+	if err := subtopicsRows.Err(); err != nil {
+		return resp, err
+	}
+
+	return resp, nil
 }
 
 func (r *MenuConfigRepository) count(ctx context.Context, query string, args ...interface{}) (int, error) {
