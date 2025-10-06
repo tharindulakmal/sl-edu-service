@@ -11,9 +11,9 @@ import (
 
 func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 	api := router.Group("/api/v1")
+	menuconfig.RegisterCatalogRoutes(api, db)
 
 	admin := api.Group("/admin")
-	menuconfig.RegisterCatalogRoutes(admin, db)
 	menuconfig.RegisterAdminMenuConfigRoutes(admin, db)
 
 	// Grades

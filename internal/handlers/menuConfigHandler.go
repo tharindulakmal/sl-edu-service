@@ -1,4 +1,4 @@
-package handler
+package handlers
 
 import (
 	"database/sql"
@@ -16,31 +16,25 @@ import (
 )
 
 type (
-	Grade           = menuconfigmodels.Grade
-	GradeUpsert     = menuconfigmodels.GradeUpsert
-	Subject         = menuconfigmodels.Subject
-	SubjectUpsert   = menuconfigmodels.SubjectUpsert
-	CatalogResponse = menuconfigmodels.CatalogResponse
-	Lesson          = menuconfigmodels.Lesson
-	LessonUpsert    = menuconfigmodels.LessonUpsert
-	Topic           = menuconfigmodels.Topic
-	TopicUpsert     = menuconfigmodels.TopicUpsert
-	Subtopic        = menuconfigmodels.Subtopic
-	SubtopicUpsert  = menuconfigmodels.SubtopicUpsert
-	Tutor           = menuconfigmodels.Tutor
-	TutorUpsert     = menuconfigmodels.TutorUpsert
-	Year            = menuconfigmodels.Year
-	YearUpsert      = menuconfigmodels.YearUpsert
-	Tutorial        = menuconfigmodels.Tutorial
-	TutorialUpsert  = menuconfigmodels.TutorialUpsert
+	Grade          = menuconfigmodels.Grade
+	GradeUpsert    = menuconfigmodels.GradeUpsert
+	Subject        = menuconfigmodels.Subject
+	SubjectUpsert  = menuconfigmodels.SubjectUpsert
+	Lesson         = menuconfigmodels.Lesson
+	LessonUpsert   = menuconfigmodels.LessonUpsert
+	Topic          = menuconfigmodels.Topic
+	TopicUpsert    = menuconfigmodels.TopicUpsert
+	Subtopic       = menuconfigmodels.Subtopic
+	SubtopicUpsert = menuconfigmodels.SubtopicUpsert
+	Tutor          = menuconfigmodels.Tutor
+	TutorUpsert    = menuconfigmodels.TutorUpsert
+	Year           = menuconfigmodels.Year
+	YearUpsert     = menuconfigmodels.YearUpsert
+	Tutorial       = menuconfigmodels.Tutorial
+	TutorialUpsert = menuconfigmodels.TutorialUpsert
 )
 
 type PagedResponse[T any] = menuconfigmodels.PagedResponse[T]
-
-type gradeSubjectLinkRequest struct {
-	GradeID   int64 `json:"gradeId"`
-	SubjectID int64 `json:"subjectId"`
-}
 
 type Handler struct {
 	repo *repository.MenuConfigRepository
@@ -50,25 +44,9 @@ func NewHandler(repo *repository.MenuConfigRepository) *Handler {
 	return &Handler{repo: repo}
 }
 
-func RegisterCatalogRoutes(group *gin.RouterGroup, db *sql.DB) {
-	repo := repository.NewMenuConfigRepository(db)
-	handler := NewHandler(repo)
-
-	registerCatalogRoutes(group, handler)
-}
-
-func registerCatalogRoutes(group *gin.RouterGroup, handler *Handler) {
-	group.GET("/catalog", handler.getCatalog)
-}
-
 func RegisterAdminMenuConfigRoutes(group *gin.RouterGroup, db *sql.DB) {
 	repo := repository.NewMenuConfigRepository(db)
 	handler := NewHandler(repo)
-
-	registerCatalogRoutes(group, handler)
-
-	group.POST("/grade-subjects", handler.linkGradeSubject)
-	group.DELETE("/grade-subjects", handler.unlinkGradeSubject)
 
 	group.GET("/grades", handler.listGrades)
 	group.POST("/grades", handler.createGrade)
@@ -117,16 +95,6 @@ func RegisterAdminMenuConfigRoutes(group *gin.RouterGroup, db *sql.DB) {
 	group.GET("/tutorials/:id", handler.getTutorial)
 	group.PUT("/tutorials/:id", handler.updateTutorial)
 	group.DELETE("/tutorials/:id", handler.deleteTutorial)
-}
-
-func (h *Handler) getCatalog(c *gin.Context) {
-	catalog, err := h.repo.FetchCatalog(c.Request.Context())
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, catalog)
 }
 
 func (h *Handler) listGrades(c *gin.Context) {
@@ -335,53 +303,6 @@ func (h *Handler) deleteSubject(c *gin.Context) {
 	}
 
 	if err := h.repo.DeleteSubject(c.Request.Context(), id); err != nil {
-		handleRepoError(c, err)
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"success": true})
-}
-
-func (h *Handler) linkGradeSubject(c *gin.Context) {
-	var input gradeSubjectLinkRequest
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	if input.GradeID <= 0 || input.SubjectID <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "gradeId and subjectId are required"})
-		return
-	}
-
-	linked, err := h.repo.LinkGradeSubject(c.Request.Context(), input.GradeID, input.SubjectID)
-	if err != nil {
-		handleRepoError(c, err)
-		return
-	}
-
-	c.JSON(http.StatusCreated, linked)
-}
-
-func (h *Handler) unlinkGradeSubject(c *gin.Context) {
-	gradeIDStr := strings.TrimSpace(c.Query("gradeId"))
-	subjectIDStr := strings.TrimSpace(c.Query("subjectId"))
-	if gradeIDStr == "" || subjectIDStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "gradeId and subjectId are required"})
-		return
-	}
-
-	gradeID, err := strconv.ParseInt(gradeIDStr, 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid gradeId"})
-		return
-	}
-	subjectID, err := strconv.ParseInt(subjectIDStr, 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid subjectId"})
-		return
-	}
-
-	if err := h.repo.UnlinkGradeSubject(c.Request.Context(), gradeID, subjectID); err != nil {
 		handleRepoError(c, err)
 		return
 	}
@@ -1067,10 +988,6 @@ func handleRepoError(c *gin.Context, err error) {
 	}
 	if errors.Is(err, repository.ErrMenuConfigNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "resource not found"})
-		return
-	}
-	if errors.Is(err, repository.ErrGradeSubjectAlreadyLinked) {
-		c.JSON(http.StatusConflict, gin.H{"error": "grade and subject are already linked"})
 		return
 	}
 	c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

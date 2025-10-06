@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/go-sql-driver/mysql"
 	menuconfigmodels "github.com/tharindulakmal/sl-edu-service/internal/models/menuconfig"
 )
 
@@ -29,7 +30,10 @@ type (
 	TutorialUpsert  = menuconfigmodels.TutorialUpsert
 )
 
-var ErrMenuConfigNotFound = errors.New("menuconfig: not found")
+var (
+	ErrMenuConfigNotFound        = errors.New("menuconfig: not found")
+	ErrGradeSubjectAlreadyLinked = errors.New("menuconfig: grade subject link exists")
+)
 
 type MenuConfigRepository struct {
 	db *sql.DB
@@ -288,6 +292,54 @@ func (r *MenuConfigRepository) DeleteSubject(ctx context.Context, id int64) erro
 	defer stmt.Close()
 
 	res, err := stmt.ExecContext(ctx, id)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrMenuConfigNotFound
+	}
+	return nil
+}
+
+func (r *MenuConfigRepository) LinkGradeSubject(ctx context.Context, gradeID, subjectID int64) (*GradeSubject, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	if err := ensureGradeExists(ctx, tx, gradeID); err != nil {
+		return nil, err
+	}
+	if err := ensureSubjectExists(ctx, tx, subjectID); err != nil {
+		return nil, err
+	}
+
+	if _, err := tx.ExecContext(ctx, "INSERT INTO grade_subjects (grade_id, subject_id) VALUES (?, ?)", gradeID, subjectID); err != nil {
+		if isDuplicateEntry(err) {
+			return nil, ErrGradeSubjectAlreadyLinked
+		}
+		return nil, err
+	}
+
+	var gs GradeSubject
+	row := tx.QueryRowContext(ctx, "SELECT grade_id, subject_id, DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%sZ') FROM grade_subjects WHERE grade_id = ? AND subject_id = ?", gradeID, subjectID)
+	if err := row.Scan(&gs.GradeID, &gs.SubjectID, &gs.CreatedAt); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return &gs, nil
+}
+
+func (r *MenuConfigRepository) UnlinkGradeSubject(ctx context.Context, gradeID, subjectID int64) error {
+	res, err := r.db.ExecContext(ctx, "DELETE FROM grade_subjects WHERE grade_id = ? AND subject_id = ?", gradeID, subjectID)
 	if err != nil {
 		return err
 	}
@@ -1095,7 +1147,7 @@ func (r *MenuConfigRepository) FetchCatalog(ctx context.Context) (CatalogRespons
 		Grades:        make([]Grade, 0),
 		Subjects:      make([]Subject, 0),
 		GradeSubjects: make([]GradeSubject, 0),
-		Lessons:       make([]Lesson, 0),
+		Lessons:       make([]menuconfigmodels.Lesson, 0),
 		Topics:        make([]Topic, 0),
 		Subtopics:     make([]Subtopic, 0),
 	}
@@ -1158,7 +1210,7 @@ func (r *MenuConfigRepository) FetchCatalog(ctx context.Context) (CatalogRespons
 	defer lessonsRows.Close()
 
 	for lessonsRows.Next() {
-		var lesson Lesson
+		var lesson menuconfigmodels.Lesson
 		if err := lessonsRows.Scan(&lesson.ID, &lesson.SubjectID, &lesson.Name, &lesson.CreatedAt); err != nil {
 			return resp, err
 		}
@@ -1245,4 +1297,34 @@ func (r *MenuConfigRepository) CheckParentExists(ctx context.Context, table stri
 		return false, err
 	}
 	return true, nil
+}
+
+func ensureGradeExists(ctx context.Context, tx *sql.Tx, gradeID int64) error {
+	var exists int
+	if err := tx.QueryRowContext(ctx, "SELECT 1 FROM grades WHERE id = ?", gradeID).Scan(&exists); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("grade not found: %w", ErrMenuConfigNotFound)
+		}
+		return err
+	}
+	return nil
+}
+
+func ensureSubjectExists(ctx context.Context, tx *sql.Tx, subjectID int64) error {
+	var exists int
+	if err := tx.QueryRowContext(ctx, "SELECT 1 FROM subjects WHERE id = ?", subjectID).Scan(&exists); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("subject not found: %w", ErrMenuConfigNotFound)
+		}
+		return err
+	}
+	return nil
+}
+
+func isDuplicateEntry(err error) bool {
+	var mysqlErr *mysql.MySQLError
+	if errors.As(err, &mysqlErr) {
+		return mysqlErr.Number == 1062
+	}
+	return false
 }

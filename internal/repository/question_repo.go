@@ -54,11 +54,15 @@ func (r *questionRepository) GetList(filters map[string]interface{}, page, pageS
 		whereParts = append(whereParts, "l.subject_id = ?")
 		args = append(args, subjectID)
 	case hasGrade && !hasSubject:
+		whereParts = append(whereParts, "q.grade_id = ?")
+		args = append(args, gradeID)
 		whereParts = append(whereParts, "EXISTS (SELECT 1 FROM grade_subjects gs WHERE gs.grade_id = ? AND gs.subject_id = l.subject_id)")
 		args = append(args, gradeID)
 	case hasGrade && hasSubject:
 		whereParts = append(whereParts, "l.subject_id = ?")
 		args = append(args, subjectID)
+		whereParts = append(whereParts, "q.grade_id = ?")
+		args = append(args, gradeID)
 		whereParts = append(whereParts, "EXISTS (SELECT 1 FROM grade_subjects gs WHERE gs.grade_id = ? AND gs.subject_id = l.subject_id)")
 		args = append(args, gradeID)
 	}
@@ -171,11 +175,15 @@ func (r *questionRepository) Count(filters map[string]interface{}) (int, error) 
 		whereParts = append(whereParts, "l.subject_id = ?")
 		args = append(args, subjectID)
 	case hasGrade && !hasSubject:
+		whereParts = append(whereParts, "q.grade_id = ?")
+		args = append(args, gradeID)
 		whereParts = append(whereParts, "EXISTS (SELECT 1 FROM grade_subjects gs WHERE gs.grade_id = ? AND gs.subject_id = l.subject_id)")
 		args = append(args, gradeID)
 	case hasGrade && hasSubject:
 		whereParts = append(whereParts, "l.subject_id = ?")
 		args = append(args, subjectID)
+		whereParts = append(whereParts, "q.grade_id = ?")
+		args = append(args, gradeID)
 		whereParts = append(whereParts, "EXISTS (SELECT 1 FROM grade_subjects gs WHERE gs.grade_id = ? AND gs.subject_id = l.subject_id)")
 		args = append(args, gradeID)
 	}
