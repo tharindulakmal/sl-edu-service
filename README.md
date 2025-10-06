@@ -33,6 +33,17 @@ go run cmd/server/main.go
 
 API available at: http://localhost:8080/health
 
+### Test the admin catalog endpoint
+
+Once the server is running and connected to your MySQL instance, you can fetch the full catalog payload with:
+
+```bash
+curl -X GET "http://localhost:8080/api/v1/admin/catalog" \
+  -H "Accept: application/json"
+```
+
+This returns grades, subjects, grade-subject mappings, lessons, topics, and subtopics in a single response for frontend filtering.
+
 Run with Docker
 Build Image
 docker build -t sl-edu-service .
