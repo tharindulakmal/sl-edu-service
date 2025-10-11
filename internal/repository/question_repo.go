@@ -170,7 +170,7 @@ func buildQuestionQueryParts(filters map[string]interface{}) (string, string, []
 			args = append(args, gradeID, gradeID, subjectID)
 		case hasGrade:
 			whereParts = append(whereParts,
-				"(((q.lesson_id IS NULL OR q.lesson_id = 0) AND q.grade_id = ?) OR (q.lesson_id IS NOT NULL AND q.lesson_id <> 0 AND EXISTS (SELECT 1 FROM grade_subject_lessons gsl WHERE gsl.grade_id = ? AND gsl.lesson_id = q.lesson_id))))",
+				"(((q.lesson_id IS NULL OR q.lesson_id = 0) AND q.grade_id = ?) OR (q.lesson_id IS NOT NULL AND q.lesson_id <> 0 AND EXISTS (SELECT 1 FROM grade_subject_lessons gsl WHERE gsl.grade_id = ? AND gsl.lesson_id = q.lesson_id)))",
 			)
 			args = append(args, gradeID, gradeID)
 		case hasSubject:
