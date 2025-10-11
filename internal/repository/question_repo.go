@@ -43,30 +43,17 @@ func (r *questionRepository) GetByID(id int) (*models.Question, error) {
 }
 
 func (r *questionRepository) GetList(filters map[string]interface{}, page, pageSize int) ([]models.Question, error) {
-	whereParts := []string{"1=1"}
+	whereParts := []string{}
 	args := []interface{}{}
 
-	gradeID, hasGrade := filters["gradeId"]
-	subjectID, hasSubject := filters["subjectId"]
-
-	switch {
-	case hasSubject && !hasGrade:
-		whereParts = append(whereParts, "l.subject_id = ?")
-		args = append(args, subjectID)
-	case hasGrade && !hasSubject:
+	if gradeID, ok := filters["gradeId"]; ok {
 		whereParts = append(whereParts, "q.grade_id = ?")
-		args = append(args, gradeID)
-		whereParts = append(whereParts, "EXISTS (SELECT 1 FROM grade_subjects gs WHERE gs.grade_id = ? AND gs.subject_id = l.subject_id)")
-		args = append(args, gradeID)
-	case hasGrade && hasSubject:
-		whereParts = append(whereParts, "l.subject_id = ?")
-		args = append(args, subjectID)
-		whereParts = append(whereParts, "q.grade_id = ?")
-		args = append(args, gradeID)
-		whereParts = append(whereParts, "EXISTS (SELECT 1 FROM grade_subjects gs WHERE gs.grade_id = ? AND gs.subject_id = l.subject_id)")
 		args = append(args, gradeID)
 	}
-
+	if subjectID, ok := filters["subjectId"]; ok {
+		whereParts = append(whereParts, "(l.subject_id = ? OR (q.lesson_id = 0 AND EXISTS (SELECT 1 FROM grade_subjects gs WHERE gs.grade_id = q.grade_id AND gs.subject_id = ?)))")
+		args = append(args, subjectID, subjectID)
+	}
 	if lessonID, ok := filters["lessonId"]; ok {
 		whereParts = append(whereParts, "q.lesson_id = ?")
 		args = append(args, lessonID)
@@ -100,7 +87,7 @@ func (r *questionRepository) GetList(filters map[string]interface{}, page, pageS
                        q.other_answers,
                        DATE_FORMAT(q.created_at, '%%Y-%%m-%%dT%%H:%%i:%%sZ') as created_at
                 FROM questions q
-                INNER JOIN lessons l ON q.lesson_id = l.id
+                LEFT JOIN lessons l ON q.lesson_id = l.id
                 %s
                 ORDER BY q.id DESC
                 LIMIT ? OFFSET ?`, whereClause)
@@ -164,30 +151,17 @@ func (r *questionRepository) Delete(id int) error {
 }
 
 func (r *questionRepository) Count(filters map[string]interface{}) (int, error) {
-	whereParts := []string{"1=1"}
+	whereParts := []string{}
 	args := []interface{}{}
 
-	gradeID, hasGrade := filters["gradeId"]
-	subjectID, hasSubject := filters["subjectId"]
-
-	switch {
-	case hasSubject && !hasGrade:
-		whereParts = append(whereParts, "l.subject_id = ?")
-		args = append(args, subjectID)
-	case hasGrade && !hasSubject:
+	if gradeID, ok := filters["gradeId"]; ok {
 		whereParts = append(whereParts, "q.grade_id = ?")
-		args = append(args, gradeID)
-		whereParts = append(whereParts, "EXISTS (SELECT 1 FROM grade_subjects gs WHERE gs.grade_id = ? AND gs.subject_id = l.subject_id)")
-		args = append(args, gradeID)
-	case hasGrade && hasSubject:
-		whereParts = append(whereParts, "l.subject_id = ?")
-		args = append(args, subjectID)
-		whereParts = append(whereParts, "q.grade_id = ?")
-		args = append(args, gradeID)
-		whereParts = append(whereParts, "EXISTS (SELECT 1 FROM grade_subjects gs WHERE gs.grade_id = ? AND gs.subject_id = l.subject_id)")
 		args = append(args, gradeID)
 	}
-
+	if subjectID, ok := filters["subjectId"]; ok {
+		whereParts = append(whereParts, "(l.subject_id = ? OR (q.lesson_id = 0 AND EXISTS (SELECT 1 FROM grade_subjects gs WHERE gs.grade_id = q.grade_id AND gs.subject_id = ?)))")
+		args = append(args, subjectID, subjectID)
+	}
 	if lessonID, ok := filters["lessonId"]; ok {
 		whereParts = append(whereParts, "q.lesson_id = ?")
 		args = append(args, lessonID)
@@ -214,7 +188,7 @@ func (r *questionRepository) Count(filters map[string]interface{}) (int, error) 
 		whereClause = "WHERE " + strings.Join(whereParts, " AND ")
 	}
 
-	query := fmt.Sprintf("SELECT COUNT(*) FROM questions q INNER JOIN lessons l ON q.lesson_id = l.id %s", whereClause)
+	query := fmt.Sprintf("SELECT COUNT(*) FROM questions q LEFT JOIN lessons l ON q.lesson_id = l.id %s", whereClause)
 
 	var count int
 	if err := r.db.QueryRow(query, args...).Scan(&count); err != nil {
