@@ -3,6 +3,7 @@ package repository
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/tharindulakmal/sl-edu-service/internal/models"
@@ -43,55 +44,7 @@ func (r *questionRepository) GetByID(id int) (*models.Question, error) {
 }
 
 func (r *questionRepository) GetList(filters map[string]interface{}, page, pageSize int) ([]models.Question, error) {
-	whereParts := []string{"1=1"}
-	args := []interface{}{}
-
-	gradeID, hasGrade := filters["gradeId"]
-	subjectID, hasSubject := filters["subjectId"]
-
-	switch {
-	case hasSubject && !hasGrade:
-		whereParts = append(whereParts, "l.subject_id = ?")
-		args = append(args, subjectID)
-	case hasGrade && !hasSubject:
-		whereParts = append(whereParts, "q.grade_id = ?")
-		args = append(args, gradeID)
-		whereParts = append(whereParts, "EXISTS (SELECT 1 FROM grade_subjects gs WHERE gs.grade_id = ? AND gs.subject_id = l.subject_id)")
-		args = append(args, gradeID)
-	case hasGrade && hasSubject:
-		whereParts = append(whereParts, "l.subject_id = ?")
-		args = append(args, subjectID)
-		whereParts = append(whereParts, "q.grade_id = ?")
-		args = append(args, gradeID)
-		whereParts = append(whereParts, "EXISTS (SELECT 1 FROM grade_subjects gs WHERE gs.grade_id = ? AND gs.subject_id = l.subject_id)")
-		args = append(args, gradeID)
-	}
-
-	if lessonID, ok := filters["lessonId"]; ok {
-		whereParts = append(whereParts, "q.lesson_id = ?")
-		args = append(args, lessonID)
-	}
-	if topicID, ok := filters["topicId"]; ok {
-		whereParts = append(whereParts, "q.topic_id = ?")
-		args = append(args, topicID)
-	}
-	if subtopicID, ok := filters["subtopicId"]; ok {
-		whereParts = append(whereParts, "q.subtopic_id = ?")
-		args = append(args, subtopicID)
-	}
-	if tutorID, ok := filters["tutorId"]; ok {
-		whereParts = append(whereParts, "q.tutor_id = ?")
-		args = append(args, tutorID)
-	}
-	if tuteID, ok := filters["tuteId"]; ok {
-		whereParts = append(whereParts, "q.tute_id = ?")
-		args = append(args, tuteID)
-	}
-
-	whereClause := ""
-	if len(whereParts) > 0 {
-		whereClause = "WHERE " + strings.Join(whereParts, " AND ")
-	}
+	joinClause, whereClause, args := buildQuestionQueryParts(filters)
 
 	offset := (page - 1) * pageSize
 	query := fmt.Sprintf(`
@@ -100,12 +53,20 @@ func (r *questionRepository) GetList(filters map[string]interface{}, page, pageS
                        q.other_answers,
                        DATE_FORMAT(q.created_at, '%%Y-%%m-%%dT%%H:%%i:%%sZ') as created_at
                 FROM questions q
-                INNER JOIN lessons l ON q.lesson_id = l.id
+                %s
                 %s
                 ORDER BY q.id DESC
-                LIMIT ? OFFSET ?`, whereClause)
+                LIMIT ? OFFSET ?`, joinClause, whereClause)
 
 	args = append(args, pageSize, offset)
+
+	if gradeID, ok := getFilterInt64(filters, "gradeId"); ok {
+		if _, hasSubject := getFilterInt64(filters, "subjectId"); !hasSubject {
+			if _, hasLesson := getFilterInt64(filters, "lessonId"); !hasLesson {
+				fmt.Printf("[questions:list] grade-only SQL (gradeId=%d): %s | args=%v\n", gradeID, query, args)
+			}
+		}
+	}
 
 	rows, err := r.db.Query(query, args...)
 	if err != nil {
@@ -164,47 +125,73 @@ func (r *questionRepository) Delete(id int) error {
 }
 
 func (r *questionRepository) Count(filters map[string]interface{}) (int, error) {
-	whereParts := []string{"1=1"}
-	args := []interface{}{}
+	joinClause, whereClause, args := buildQuestionQueryParts(filters)
 
-	gradeID, hasGrade := filters["gradeId"]
-	subjectID, hasSubject := filters["subjectId"]
+	query := fmt.Sprintf("SELECT COUNT(*) FROM questions q %s %s", joinClause, whereClause)
 
-	switch {
-	case hasSubject && !hasGrade:
-		whereParts = append(whereParts, "l.subject_id = ?")
-		args = append(args, subjectID)
-	case hasGrade && !hasSubject:
-		whereParts = append(whereParts, "q.grade_id = ?")
-		args = append(args, gradeID)
-		whereParts = append(whereParts, "EXISTS (SELECT 1 FROM grade_subjects gs WHERE gs.grade_id = ? AND gs.subject_id = l.subject_id)")
-		args = append(args, gradeID)
-	case hasGrade && hasSubject:
-		whereParts = append(whereParts, "l.subject_id = ?")
-		args = append(args, subjectID)
-		whereParts = append(whereParts, "q.grade_id = ?")
-		args = append(args, gradeID)
-		whereParts = append(whereParts, "EXISTS (SELECT 1 FROM grade_subjects gs WHERE gs.grade_id = ? AND gs.subject_id = l.subject_id)")
-		args = append(args, gradeID)
+	if gradeID, ok := getFilterInt64(filters, "gradeId"); ok {
+		if _, hasSubject := getFilterInt64(filters, "subjectId"); !hasSubject {
+			if _, hasLesson := getFilterInt64(filters, "lessonId"); !hasLesson {
+				fmt.Printf("[questions:count] grade-only SQL (gradeId=%d): %s | args=%v\n", gradeID, query, args)
+			}
+		}
 	}
 
-	if lessonID, ok := filters["lessonId"]; ok {
+	var count int
+	if err := r.db.QueryRow(query, args...).Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func buildQuestionQueryParts(filters map[string]interface{}) (string, string, []interface{}) {
+	joinParts := make([]string, 0)
+	whereParts := []string{"1=1"}
+	args := make([]interface{}, 0)
+
+	gradeID, hasGrade := getFilterInt64(filters, "gradeId")
+	subjectID, hasSubject := getFilterInt64(filters, "subjectId")
+	lessonID, hasLesson := getFilterInt64(filters, "lessonId")
+
+	gradeOnly := hasGrade && !hasSubject && !hasLesson
+
+	if hasLesson {
 		whereParts = append(whereParts, "q.lesson_id = ?")
 		args = append(args, lessonID)
+	} else {
+		if (hasGrade && hasSubject) || (!gradeOnly && hasSubject) {
+			joinParts = append(joinParts, "LEFT JOIN lessons l ON q.lesson_id IS NOT NULL AND q.lesson_id <> 0 AND q.lesson_id = l.id")
+		}
+		switch {
+		case hasGrade && hasSubject:
+			whereParts = append(whereParts,
+				"(((q.lesson_id IS NULL OR q.lesson_id = 0) AND q.grade_id = ?) OR (q.lesson_id IS NOT NULL AND q.lesson_id <> 0 AND EXISTS (SELECT 1 FROM grade_subject_lessons gsl WHERE gsl.grade_id = ? AND gsl.subject_id = ? AND gsl.lesson_id = q.lesson_id)))",
+			)
+			args = append(args, gradeID, gradeID, subjectID)
+		case hasGrade:
+			whereParts = append(whereParts,
+				"(((q.lesson_id IS NULL OR q.lesson_id = 0) AND q.grade_id = ?) OR (q.lesson_id IS NOT NULL AND q.lesson_id <> 0 AND EXISTS (SELECT 1 FROM lessons l WHERE l.id = q.lesson_id AND EXISTS (SELECT 1 FROM grade_subjects gs WHERE gs.subject_id = l.subject_id AND gs.grade_id = ?))))",
+			)
+			args = append(args, gradeID, gradeID)
+		case hasSubject:
+			whereParts = append(whereParts, "(q.lesson_id IS NOT NULL AND q.lesson_id <> 0 AND l.subject_id = ?)")
+			args = append(args, subjectID)
+		}
 	}
-	if topicID, ok := filters["topicId"]; ok {
+
+	if topicID, ok := getFilterInt64(filters, "topicId"); ok {
 		whereParts = append(whereParts, "q.topic_id = ?")
 		args = append(args, topicID)
 	}
-	if subtopicID, ok := filters["subtopicId"]; ok {
+	if subtopicID, ok := getFilterInt64(filters, "subtopicId"); ok {
 		whereParts = append(whereParts, "q.subtopic_id = ?")
 		args = append(args, subtopicID)
 	}
-	if tutorID, ok := filters["tutorId"]; ok {
+	if tutorID, ok := getFilterInt64(filters, "tutorId"); ok {
 		whereParts = append(whereParts, "q.tutor_id = ?")
 		args = append(args, tutorID)
 	}
-	if tuteID, ok := filters["tuteId"]; ok {
+	if tuteID, ok := getFilterInt64(filters, "tuteId"); ok {
 		whereParts = append(whereParts, "q.tute_id = ?")
 		args = append(args, tuteID)
 	}
@@ -214,11 +201,51 @@ func (r *questionRepository) Count(filters map[string]interface{}) (int, error) 
 		whereClause = "WHERE " + strings.Join(whereParts, " AND ")
 	}
 
-	query := fmt.Sprintf("SELECT COUNT(*) FROM questions q INNER JOIN lessons l ON q.lesson_id = l.id %s", whereClause)
-
-	var count int
-	if err := r.db.QueryRow(query, args...).Scan(&count); err != nil {
-		return 0, err
+	joinClause := ""
+	if len(joinParts) > 0 {
+		joinClause = strings.Join(joinParts, "\n")
 	}
-	return count, nil
+
+	return joinClause, whereClause, args
+}
+
+func getFilterInt64(filters map[string]interface{}, key string) (int64, bool) {
+	val, ok := filters[key]
+	if !ok || val == nil {
+		return 0, false
+	}
+	switch v := val.(type) {
+	case int:
+		if v == 0 {
+			return 0, false
+		}
+		return int64(v), true
+	case int64:
+		if v == 0 {
+			return 0, false
+		}
+		return v, true
+	case int32:
+		if v == 0 {
+			return 0, false
+		}
+		return int64(v), true
+	case float64:
+		if v == 0 {
+			return 0, false
+		}
+		return int64(v), true
+	case string:
+		trimmed := strings.TrimSpace(v)
+		if trimmed == "" || trimmed == "0" {
+			return 0, false
+		}
+		parsed, err := strconv.ParseInt(trimmed, 10, 64)
+		if err != nil || parsed == 0 {
+			return 0, false
+		}
+		return parsed, true
+	default:
+		return 0, false
+	}
 }

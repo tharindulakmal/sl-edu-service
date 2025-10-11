@@ -28,8 +28,8 @@ func ValidateGradeUpsert(input menuconfigmodels.GradeUpsert) error {
 }
 
 func ValidateSubjectUpsert(input menuconfigmodels.SubjectUpsert) error {
-	if input.GradeID == 0 {
-		return errors.New("gradeId is required")
+	if input.GradeID < 0 {
+		return errors.New("gradeId must be positive")
 	}
 	return validateName(input.Name)
 }

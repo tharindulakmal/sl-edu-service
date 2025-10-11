@@ -12,27 +12,29 @@ import (
 )
 
 type (
-	Grade           = menuconfigmodels.Grade
-	GradeUpsert     = menuconfigmodels.GradeUpsert
-	Subject         = menuconfigmodels.Subject
-	SubjectUpsert   = menuconfigmodels.SubjectUpsert
-	CatalogResponse = menuconfigmodels.CatalogResponse
-	GradeSubject    = menuconfigmodels.GradeSubject
-	Topic           = menuconfigmodels.Topic
-	TopicUpsert     = menuconfigmodels.TopicUpsert
-	Subtopic        = menuconfigmodels.Subtopic
-	SubtopicUpsert  = menuconfigmodels.SubtopicUpsert
-	Tutor           = menuconfigmodels.Tutor
-	TutorUpsert     = menuconfigmodels.TutorUpsert
-	Year            = menuconfigmodels.Year
-	YearUpsert      = menuconfigmodels.YearUpsert
-	Tutorial        = menuconfigmodels.Tutorial
-	TutorialUpsert  = menuconfigmodels.TutorialUpsert
+	Grade              = menuconfigmodels.Grade
+	GradeUpsert        = menuconfigmodels.GradeUpsert
+	Subject            = menuconfigmodels.Subject
+	SubjectUpsert      = menuconfigmodels.SubjectUpsert
+	CatalogResponse    = menuconfigmodels.CatalogResponse
+	GradeSubject       = menuconfigmodels.GradeSubject
+	GradeSubjectLesson = menuconfigmodels.GradeSubjectLesson
+	Topic              = menuconfigmodels.Topic
+	TopicUpsert        = menuconfigmodels.TopicUpsert
+	Subtopic           = menuconfigmodels.Subtopic
+	SubtopicUpsert     = menuconfigmodels.SubtopicUpsert
+	Tutor              = menuconfigmodels.Tutor
+	TutorUpsert        = menuconfigmodels.TutorUpsert
+	Year               = menuconfigmodels.Year
+	YearUpsert         = menuconfigmodels.YearUpsert
+	Tutorial           = menuconfigmodels.Tutorial
+	TutorialUpsert     = menuconfigmodels.TutorialUpsert
 )
 
 var (
-	ErrMenuConfigNotFound        = errors.New("menuconfig: not found")
-	ErrGradeSubjectAlreadyLinked = errors.New("menuconfig: grade subject link exists")
+	ErrMenuConfigNotFound              = errors.New("menuconfig: not found")
+	ErrGradeSubjectAlreadyLinked       = errors.New("menuconfig: grade subject link exists")
+	ErrGradeSubjectLessonAlreadyLinked = errors.New("menuconfig: grade subject lesson link exists")
 )
 
 type MenuConfigRepository struct {
@@ -353,29 +355,90 @@ func (r *MenuConfigRepository) UnlinkGradeSubject(ctx context.Context, gradeID, 
 	return nil
 }
 
-func (r *MenuConfigRepository) ListLessons(ctx context.Context, subjectID *int64, search string, page, pageSize int) ([]menuconfigmodels.Lesson, int, error) {
-	baseQuery := "SELECT id, subject_id, name, DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%sZ') AS created_at FROM lessons"
-	countQuery := "SELECT COUNT(*) FROM lessons"
-	filters := make([]string, 0)
+func (r *MenuConfigRepository) LinkGradeSubjectLesson(ctx context.Context, gradeID, subjectID, lessonID int64) (*GradeSubjectLesson, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	if err := ensureGradeExists(ctx, tx, gradeID); err != nil {
+		return nil, err
+	}
+	if err := ensureSubjectExists(ctx, tx, subjectID); err != nil {
+		return nil, err
+	}
+	if err := ensureLessonBelongsToSubject(ctx, tx, lessonID, subjectID); err != nil {
+		return nil, err
+	}
+	if err := ensureGradeSubjectLinkExists(ctx, tx, gradeID, subjectID); err != nil {
+		return nil, err
+	}
+
+	if _, err := tx.ExecContext(ctx, "INSERT INTO grade_subject_lessons (grade_id, subject_id, lesson_id) VALUES (?, ?, ?)", gradeID, subjectID, lessonID); err != nil {
+		if isDuplicateEntry(err) {
+			return nil, ErrGradeSubjectLessonAlreadyLinked
+		}
+		return nil, err
+	}
+
+	var gsl GradeSubjectLesson
+	row := tx.QueryRowContext(ctx, "SELECT grade_id, subject_id, lesson_id, DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%sZ') FROM grade_subject_lessons WHERE grade_id = ? AND subject_id = ? AND lesson_id = ?", gradeID, subjectID, lessonID)
+	if err := row.Scan(&gsl.GradeID, &gsl.SubjectID, &gsl.LessonID, &gsl.CreatedAt); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return &gsl, nil
+}
+
+func (r *MenuConfigRepository) UnlinkGradeSubjectLesson(ctx context.Context, gradeID, subjectID, lessonID int64) error {
+	res, err := r.db.ExecContext(ctx, "DELETE FROM grade_subject_lessons WHERE grade_id = ? AND subject_id = ? AND lesson_id = ?", gradeID, subjectID, lessonID)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrMenuConfigNotFound
+	}
+	return nil
+}
+
+func (r *MenuConfigRepository) ListLessons(ctx context.Context, gradeID, subjectID *int64, search string, page, pageSize int) ([]menuconfigmodels.Lesson, int, error) {
+	baseQuery := "SELECT l.id, l.subject_id, l.name, DATE_FORMAT(l.created_at, '%Y-%m-%dT%H:%i:%sZ') AS created_at FROM lessons l"
+	countQuery := "SELECT COUNT(*) FROM lessons l"
+	conditions := make([]string, 0)
 	args := make([]interface{}, 0)
 	countArgs := make([]interface{}, 0)
 
+	if gradeID != nil {
+		conditions = append(conditions, "EXISTS (SELECT 1 FROM grade_subjects gs WHERE gs.subject_id = l.subject_id AND gs.grade_id = ?)")
+		args = append(args, *gradeID)
+		countArgs = append(countArgs, *gradeID)
+	}
 	if subjectID != nil {
-		filters = append(filters, "subject_id = ?")
+		conditions = append(conditions, "l.subject_id = ?")
 		args = append(args, *subjectID)
 		countArgs = append(countArgs, *subjectID)
 	}
 	if search != "" {
-		filters = append(filters, "name LIKE CONCAT('%', ?, '%')")
+		conditions = append(conditions, "l.name LIKE CONCAT('%', ?, '%')")
 		args = append(args, search)
 		countArgs = append(countArgs, search)
 	}
-	if len(filters) > 0 {
-		where := " WHERE " + strings.Join(filters, " AND ")
+
+	if len(conditions) > 0 {
+		where := " WHERE " + strings.Join(conditions, " AND ")
 		baseQuery += where
 		countQuery += where
 	}
-	baseQuery += " ORDER BY id DESC LIMIT ? OFFSET ?"
+
+	baseQuery += " ORDER BY l.id DESC LIMIT ? OFFSET ?"
 	args = append(args, pageSize, offsetFromPage(page, pageSize))
 
 	stmt, err := r.db.PrepareContext(ctx, baseQuery)
@@ -1144,12 +1207,13 @@ func (r *MenuConfigRepository) DeleteTutorial(ctx context.Context, id int64) err
 
 func (r *MenuConfigRepository) FetchCatalog(ctx context.Context) (CatalogResponse, error) {
 	resp := CatalogResponse{
-		Grades:        make([]Grade, 0),
-		Subjects:      make([]Subject, 0),
-		GradeSubjects: make([]GradeSubject, 0),
-		Lessons:       make([]menuconfigmodels.Lesson, 0),
-		Topics:        make([]Topic, 0),
-		Subtopics:     make([]Subtopic, 0),
+		Grades:              make([]Grade, 0),
+		Subjects:            make([]Subject, 0),
+		GradeSubjects:       make([]GradeSubject, 0),
+		GradeSubjectLessons: make([]GradeSubjectLesson, 0),
+		Lessons:             make([]menuconfigmodels.Lesson, 0),
+		Topics:              make([]Topic, 0),
+		Subtopics:           make([]Subtopic, 0),
 	}
 
 	gradesRows, err := r.db.QueryContext(ctx, "SELECT id, name, DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%sZ') AS created_at FROM grades ORDER BY id ASC")
@@ -1200,6 +1264,23 @@ func (r *MenuConfigRepository) FetchCatalog(ctx context.Context) (CatalogRespons
 		resp.GradeSubjects = append(resp.GradeSubjects, gs)
 	}
 	if err := gradeSubjectsRows.Err(); err != nil {
+		return resp, err
+	}
+
+	gradeSubjectLessonsRows, err := r.db.QueryContext(ctx, "SELECT grade_id, subject_id, lesson_id, DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%sZ') AS created_at FROM grade_subject_lessons ORDER BY grade_id ASC, subject_id ASC, lesson_id ASC")
+	if err != nil {
+		return resp, err
+	}
+	defer gradeSubjectLessonsRows.Close()
+
+	for gradeSubjectLessonsRows.Next() {
+		var gsl GradeSubjectLesson
+		if err := gradeSubjectLessonsRows.Scan(&gsl.GradeID, &gsl.SubjectID, &gsl.LessonID, &gsl.CreatedAt); err != nil {
+			return resp, err
+		}
+		resp.GradeSubjectLessons = append(resp.GradeSubjectLessons, gsl)
+	}
+	if err := gradeSubjectLessonsRows.Err(); err != nil {
 		return resp, err
 	}
 
@@ -1327,4 +1408,29 @@ func isDuplicateEntry(err error) bool {
 		return mysqlErr.Number == 1062
 	}
 	return false
+}
+
+func ensureLessonBelongsToSubject(ctx context.Context, tx *sql.Tx, lessonID, subjectID int64) error {
+	var storedSubjectID int64
+	if err := tx.QueryRowContext(ctx, "SELECT subject_id FROM lessons WHERE id = ?", lessonID).Scan(&storedSubjectID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("lesson not found: %w", ErrMenuConfigNotFound)
+		}
+		return err
+	}
+	if storedSubjectID != subjectID {
+		return fmt.Errorf("lesson does not belong to subject: %w", ErrMenuConfigNotFound)
+	}
+	return nil
+}
+
+func ensureGradeSubjectLinkExists(ctx context.Context, tx *sql.Tx, gradeID, subjectID int64) error {
+	var exists int
+	if err := tx.QueryRowContext(ctx, "SELECT 1 FROM grade_subjects WHERE grade_id = ? AND subject_id = ?", gradeID, subjectID).Scan(&exists); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("grade subject link not found: %w", ErrMenuConfigNotFound)
+		}
+		return err
+	}
+	return nil
 }

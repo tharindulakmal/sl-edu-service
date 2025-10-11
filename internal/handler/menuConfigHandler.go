@@ -2,6 +2,7 @@ package handler
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -16,30 +17,87 @@ import (
 )
 
 type (
-	Grade           = menuconfigmodels.Grade
-	GradeUpsert     = menuconfigmodels.GradeUpsert
-	Subject         = menuconfigmodels.Subject
-	SubjectUpsert   = menuconfigmodels.SubjectUpsert
-	CatalogResponse = menuconfigmodels.CatalogResponse
-	Lesson          = menuconfigmodels.Lesson
-	LessonUpsert    = menuconfigmodels.LessonUpsert
-	Topic           = menuconfigmodels.Topic
-	TopicUpsert     = menuconfigmodels.TopicUpsert
-	Subtopic        = menuconfigmodels.Subtopic
-	SubtopicUpsert  = menuconfigmodels.SubtopicUpsert
-	Tutor           = menuconfigmodels.Tutor
-	TutorUpsert     = menuconfigmodels.TutorUpsert
-	Year            = menuconfigmodels.Year
-	YearUpsert      = menuconfigmodels.YearUpsert
-	Tutorial        = menuconfigmodels.Tutorial
-	TutorialUpsert  = menuconfigmodels.TutorialUpsert
+	Grade              = menuconfigmodels.Grade
+	GradeUpsert        = menuconfigmodels.GradeUpsert
+	Subject            = menuconfigmodels.Subject
+	SubjectUpsert      = menuconfigmodels.SubjectUpsert
+	CatalogResponse    = menuconfigmodels.CatalogResponse
+	Lesson             = menuconfigmodels.Lesson
+	LessonUpsert       = menuconfigmodels.LessonUpsert
+	Topic              = menuconfigmodels.Topic
+	TopicUpsert        = menuconfigmodels.TopicUpsert
+	Subtopic           = menuconfigmodels.Subtopic
+	SubtopicUpsert     = menuconfigmodels.SubtopicUpsert
+	Tutor              = menuconfigmodels.Tutor
+	TutorUpsert        = menuconfigmodels.TutorUpsert
+	Year               = menuconfigmodels.Year
+	YearUpsert         = menuconfigmodels.YearUpsert
+	Tutorial           = menuconfigmodels.Tutorial
+	TutorialUpsert     = menuconfigmodels.TutorialUpsert
+	GradeSubjectLesson = menuconfigmodels.GradeSubjectLesson
 )
 
 type PagedResponse[T any] = menuconfigmodels.PagedResponse[T]
 
 type gradeSubjectLinkRequest struct {
-	GradeID   int64 `json:"gradeId"`
-	SubjectID int64 `json:"subjectId"`
+	GradeID   int64
+	SubjectID int64
+}
+
+type gradeSubjectLessonLinkRequest struct {
+	GradeID   int64
+	SubjectID int64
+	LessonID  int64
+}
+
+func (r *gradeSubjectLinkRequest) UnmarshalJSON(data []byte) error {
+	type payload struct {
+		GradeID   json.RawMessage `json:"gradeId"`
+		SubjectID json.RawMessage `json:"subjectId"`
+	}
+	var aux payload
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	gradeID, err := parseFlexibleInt64(aux.GradeID, "gradeId")
+	if err != nil {
+		return err
+	}
+	subjectID, err := parseFlexibleInt64(aux.SubjectID, "subjectId")
+	if err != nil {
+		return err
+	}
+	r.GradeID = gradeID
+	r.SubjectID = subjectID
+	return nil
+}
+
+func (r *gradeSubjectLessonLinkRequest) UnmarshalJSON(data []byte) error {
+	type payload struct {
+		GradeID   json.RawMessage `json:"gradeId"`
+		SubjectID json.RawMessage `json:"subjectId"`
+		LessonID  json.RawMessage `json:"lessonId"`
+	}
+	var aux payload
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	gradeID, err := parseFlexibleInt64(aux.GradeID, "gradeId")
+	if err != nil {
+		return err
+	}
+	subjectID, err := parseFlexibleInt64(aux.SubjectID, "subjectId")
+	if err != nil {
+		return err
+	}
+	lessonID, err := parseFlexibleInt64(aux.LessonID, "lessonId")
+	if err != nil {
+		return err
+	}
+	r.GradeID = gradeID
+	r.SubjectID = subjectID
+	r.LessonID = lessonID
+	return nil
 }
 
 type Handler struct {
@@ -69,6 +127,8 @@ func RegisterAdminMenuConfigRoutes(group *gin.RouterGroup, db *sql.DB) {
 
 	group.POST("/grade-subjects", handler.linkGradeSubject)
 	group.DELETE("/grade-subjects", handler.unlinkGradeSubject)
+	group.POST("/grade-subject-lessons", handler.linkGradeSubjectLesson)
+	group.DELETE("/grade-subject-lessons", handler.unlinkGradeSubjectLesson)
 
 	group.GET("/grades", handler.listGrades)
 	group.POST("/grades", handler.createGrade)
@@ -277,12 +337,14 @@ func (h *Handler) createSubject(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if ok, err := h.repo.CheckParentExists(c.Request.Context(), "grades", input.GradeID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	} else if !ok {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "grade not found"})
-		return
+	if input.GradeID > 0 {
+		if ok, err := h.repo.CheckParentExists(c.Request.Context(), "grades", input.GradeID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		} else if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "grade not found"})
+			return
+		}
 	}
 
 	subject, err := h.repo.CreateSubject(c.Request.Context(), input)
@@ -310,12 +372,14 @@ func (h *Handler) updateSubject(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if ok, err := h.repo.CheckParentExists(c.Request.Context(), "grades", input.GradeID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	} else if !ok {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "grade not found"})
-		return
+	if input.GradeID > 0 {
+		if ok, err := h.repo.CheckParentExists(c.Request.Context(), "grades", input.GradeID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		} else if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "grade not found"})
+			return
+		}
 	}
 
 	subject, err := h.repo.UpdateSubject(c.Request.Context(), id, input)
@@ -389,6 +453,59 @@ func (h *Handler) unlinkGradeSubject(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
+func (h *Handler) linkGradeSubjectLesson(c *gin.Context) {
+	var input gradeSubjectLessonLinkRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if input.GradeID <= 0 || input.SubjectID <= 0 || input.LessonID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "gradeId, subjectId and lessonId are required"})
+		return
+	}
+
+	linked, err := h.repo.LinkGradeSubjectLesson(c.Request.Context(), input.GradeID, input.SubjectID, input.LessonID)
+	if err != nil {
+		handleRepoError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusCreated, linked)
+}
+
+func (h *Handler) unlinkGradeSubjectLesson(c *gin.Context) {
+	gradeIDStr := strings.TrimSpace(c.Query("gradeId"))
+	subjectIDStr := strings.TrimSpace(c.Query("subjectId"))
+	lessonIDStr := strings.TrimSpace(c.Query("lessonId"))
+	if gradeIDStr == "" || subjectIDStr == "" || lessonIDStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "gradeId, subjectId and lessonId are required"})
+		return
+	}
+
+	gradeID, err := strconv.ParseInt(gradeIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid gradeId"})
+		return
+	}
+	subjectID, err := strconv.ParseInt(subjectIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid subjectId"})
+		return
+	}
+	lessonID, err := strconv.ParseInt(lessonIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid lessonId"})
+		return
+	}
+
+	if err := h.repo.UnlinkGradeSubjectLesson(c.Request.Context(), gradeID, subjectID, lessonID); err != nil {
+		handleRepoError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
 func (h *Handler) listLessons(c *gin.Context) {
 	page, pageSize, err := parsePagination(c)
 	if err != nil {
@@ -398,6 +515,8 @@ func (h *Handler) listLessons(c *gin.Context) {
 
 	search := strings.TrimSpace(c.Query("search"))
 	subjectParam := strings.TrimSpace(c.Query("subjectId"))
+	gradeParam := strings.TrimSpace(c.Query("gradeId"))
+
 	var subjectID *int64
 	if subjectParam != "" {
 		id, convErr := strconv.ParseInt(subjectParam, 10, 64)
@@ -408,7 +527,17 @@ func (h *Handler) listLessons(c *gin.Context) {
 		subjectID = &id
 	}
 
-	lessons, total, err := h.repo.ListLessons(c.Request.Context(), subjectID, search, page, pageSize)
+	var gradeID *int64
+	if gradeParam != "" {
+		id, convErr := strconv.ParseInt(gradeParam, 10, 64)
+		if convErr != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid gradeId"})
+			return
+		}
+		gradeID = &id
+	}
+
+	lessons, total, err := h.repo.ListLessons(c.Request.Context(), gradeID, subjectID, search, page, pageSize)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1061,6 +1190,32 @@ func parseIDParam(c *gin.Context) (int64, error) {
 	return id, nil
 }
 
+func parseFlexibleInt64(raw json.RawMessage, field string) (int64, error) {
+	if len(raw) == 0 {
+		return 0, nil
+	}
+
+	var asInt int64
+	if err := json.Unmarshal(raw, &asInt); err == nil {
+		return asInt, nil
+	}
+
+	var asStr string
+	if err := json.Unmarshal(raw, &asStr); err == nil {
+		trimmed := strings.TrimSpace(asStr)
+		if trimmed == "" {
+			return 0, nil
+		}
+		parsed, err := strconv.ParseInt(trimmed, 10, 64)
+		if err != nil {
+			return 0, fmt.Errorf("%s must be a valid integer", field)
+		}
+		return parsed, nil
+	}
+
+	return 0, fmt.Errorf("%s must be a number or numeric string", field)
+}
+
 func handleRepoError(c *gin.Context, err error) {
 	if err == nil {
 		return
@@ -1071,6 +1226,10 @@ func handleRepoError(c *gin.Context, err error) {
 	}
 	if errors.Is(err, repository.ErrGradeSubjectAlreadyLinked) {
 		c.JSON(http.StatusConflict, gin.H{"error": "grade and subject are already linked"})
+		return
+	}
+	if errors.Is(err, repository.ErrGradeSubjectLessonAlreadyLinked) {
+		c.JSON(http.StatusConflict, gin.H{"error": "grade, subject and lesson are already linked"})
 		return
 	}
 	c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

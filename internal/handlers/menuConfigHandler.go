@@ -245,12 +245,14 @@ func (h *Handler) createSubject(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if ok, err := h.repo.CheckParentExists(c.Request.Context(), "grades", input.GradeID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	} else if !ok {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "grade not found"})
-		return
+	if input.GradeID > 0 {
+		if ok, err := h.repo.CheckParentExists(c.Request.Context(), "grades", input.GradeID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		} else if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "grade not found"})
+			return
+		}
 	}
 
 	subject, err := h.repo.CreateSubject(c.Request.Context(), input)
@@ -278,12 +280,14 @@ func (h *Handler) updateSubject(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if ok, err := h.repo.CheckParentExists(c.Request.Context(), "grades", input.GradeID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	} else if !ok {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "grade not found"})
-		return
+	if input.GradeID > 0 {
+		if ok, err := h.repo.CheckParentExists(c.Request.Context(), "grades", input.GradeID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		} else if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "grade not found"})
+			return
+		}
 	}
 
 	subject, err := h.repo.UpdateSubject(c.Request.Context(), id, input)
@@ -329,7 +333,7 @@ func (h *Handler) listLessons(c *gin.Context) {
 		subjectID = &id
 	}
 
-	lessons, total, err := h.repo.ListLessons(c.Request.Context(), subjectID, search, page, pageSize)
+	lessons, total, err := h.repo.ListLessons(c.Request.Context(), nil, subjectID, search, page, pageSize)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
